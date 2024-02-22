@@ -1,31 +1,50 @@
-const db = require('../util/database');
-
 module.exports = class Driver {
-    constructor(id){
+    constructor(id) {
         this.id = id;
     }
-    // return db.execute('INSERT INTO products (type,weight,length,breadth,picture,pickup_address,drop_address,alternate_phone_number,c_status,customer_id) VALUES (?, ?, ?, ? , ? ,? ,? ,?,?,?)',
 
-    save(){
-        // console.log('herer');
-        return db.execute(`INSERT INTO drivers (id) VALUES ('${this.id}')`)
-    }
-
-    static getFreeDrivers(){
-        return db.execute(`SELECT * FROM drivers WHERE status="free"`);
-    }
-    // UPDATE products ,driver_id = "${driver_id}" WHERE id=${order_id}
-    static setTrackingId(tracking_id,driver_id){
-        return db.execute(`UPDATE drivers SET  tracking_id = "${tracking_id}" WHERE id=${driver_id}`)
+    async save(db) {
+        try {
+            const result = await db.execute(`INSERT INTO drivers (id) VALUES (?)`, [this.id]);
+            return result;
+        } catch (error) {
+            throw new Error(`Error saving driver: ${error.message}`);
+        }
     }
 
-    static setStatus (c_status,driver_id){
-        console.log(driver_id);
-        // console.log(`UPDATE drivers SET status = "${c_status}" WHERE id=${tracking_id}`);
-        return db.execute(`UPDATE drivers SET status = "${c_status}" WHERE id=${driver_id}`)
+    static async getFreeDrivers(db) {
+        try {
+            const result = await db.execute(`SELECT * FROM drivers WHERE status="free"`);
+            return result;
+        } catch (error) {
+            throw new Error(`Error fetching free drivers: ${error.message}`);
+        }
     }
 
-    static getRecordByTrackingId(tracking_id){
-        return db.execute(`SELECT * FROM drivers WHERE tracking_id=${tracking_id}`)
+    static async setTrackingId(db, tracking_id, driver_id) {
+        try {
+            const result = await db.execute(`UPDATE drivers SET tracking_id = ? WHERE id = ?`, [tracking_id, driver_id]);
+            return result;
+        } catch (error) {
+            throw new Error(`Error setting tracking ID: ${error.message}`);
+        }
     }
+
+    static async setStatus(db, c_status, driver_id) {
+        try {
+            const result = await db.execute(`UPDATE drivers SET status = ? WHERE id = ?`, [c_status, driver_id]);
+            return result;
+        } catch (error) {
+            throw new Error(`Error setting status: ${error.message}`);
+        }
     }
+
+    static async getRecordByTrackingId(db, tracking_id) {
+        try {
+            const result = await db.execute(`SELECT * FROM drivers WHERE tracking_id = ?`, [tracking_id]);
+            return result;
+        } catch (error) {
+            throw new Error(`Error fetching driver record by tracking ID: ${error.message}`);
+        }
+    }
+};

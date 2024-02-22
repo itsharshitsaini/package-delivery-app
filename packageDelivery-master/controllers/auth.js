@@ -6,181 +6,153 @@ const db = require('../util/database');
 const jwt = require('jsonwebtoken');
 const Driver = require('../models/drivers');
 
-exports.postSignup= (req,res)=>{
-
-////// checking if user is verified  
-
-let PhoneNumber = req.body.PhoneNumber;  
-
-    User.findByPhoneNumber(PhoneNumber)
-    .then(([data,meta]) => {
-        
-        if (data.length > 0) {
-            // console.log();
-            // res.send("PhoneNumber in use");
-            console.log("user in use");
-            res.send("number in use");
+exports.postSignup = async (req, res) => {
+    try {
+        const { PhoneNumber, Name, Email, Country, State, City, ZipCode, Designation } = req.body;
+        // Check if the user is registered
+        const existingUser = await User.findByPhoneNumber(PhoneNumber);
+        if (existingUser.length > 0) {
+            return res.status(400).json({ error: "Phone number already in use" });
         }
-
-        else {            
-    //////  sending otp to user 
-let code = Math.floor(100000 + Math.random() * 900000); // otp 
-client.messages.create({
-        src: '+919877319473',
-        dst: "+91"+`${req.body.PhoneNumber}`,
-        text: `Hello ${req.body.Name}, your 6 digit otp verification code is ${code}`
+        const code = Math.floor(100000 + Math.random() * 900000);
+        await sendOTP(PhoneNumber, Name, code);
+        await saveUser(Name, Email, PhoneNumber, Country, State, City, ZipCode, code, Designation);
+        // Create Token
+        const token = generateToken(PhoneNumber);
+        res.status(200).json({ token, email: Email, PhoneNumber });
+    } catch (error) {
+        console.error("Error in postSignup:", error);
+        res.status(500).json({ error: "Internal server error" });
     }
-).then(function(message_created) {
-    console.log(message_created)
-    
-})
-.catch(err=>console.log(err));
+};
 
-            //////// storing user data in db 
-const user = new User(null,req.body.Name,req.body.Email,req.body.PhoneNumber,req.body.Country,req.body.State,req.body.City,req.body.ZipCode,code,req.body.Designation);
-user.save().then(()=>{console.log(" user added")}).catch(err=>console.log(err))
-
-// creating json web token 
-
-// since phone number is unique  we can send it in token 
-  const token = jwt.sign({PhoneNumber:req.body.PhoneNumber},
-    'secret',{expiresIn:'9h'}
-    );
-    res.status(200).json({token:token,email:req.body.Email,PhoneNumber:req.body.PhoneNumber}) 
-        }
-    });
-
-
-
-}
-
-
-exports.postVerify= (req,res)=>{
-// console.log(req.body);
-// console.log("bevbek");
-// console.log("herer");
-    const Token = req.body.Token;
-    let OTP = req.body.OTP;
-    // console.log(token);
-    // console.log(otp);
-
-    // decodedToken =
-    // decodedToken =
-    // decodedToken = jwt.verify(Token,'secret');
-    // console.log(Token);
-    let decodedToken;
-    try{
-            decodedToken = jwt.verify(Token,'secret');
-            }
-            catch (err){
-                err.statusCode = 500;
-                res.send (err);
-            }
-            // console.log(decodedToken);
-
-    
-    let PhoneNumber = decodedToken.PhoneNumber;
-    // User.findByPhoneNumber(PhoneNumber);
-    // console.log(PhoneNumber);
-
-    User.getRecordByPhoneNumber(PhoneNumber)
-    .then(([data,meta]) => {
-        // console.log("data fetched from db")
-///   multiple login are possible by user fetch the latest one 
-
-        
-        let db_otp = data[data.length-1].OTP;
-        // console.log(data);
-        let Designation = data[data.length-1].Designation;
-        
-        let user_id=data[data.length-1].id;
-
-        if (db_otp === OTP ){
-            // console.log("user correct");
-            User.update_verify(PhoneNumber,Designation)
-            .then(()=>{
-                res.status(200).send(`VERIFIED ${Designation} `);
-
-                if (  Designation === 'DRIVER' || Designation === 'VERIFIED DRIVER'){
-                    const driver = new Driver(user_id);
-                    // console.log('hereigdwv');
-                    driver.save()
-                    .then(()=>{console.log("driver added");})
-                    .catch(err=>console.log(err))
-                    // dont send second res
-                }
-            })
-            .catch(err =>res.send(err));
-
-            //// if driver add in driver table
-
-          
-
-        }
-        else {
-            res.status(400).send("WRONG OTP")
-            console.log("unable to verify");
-            // can make multiple attempts 
-            // or delete record 
-        }
-
-    });
-
-
-}
-
-
-/// designation verified user 
-
-exports.postLogin = (req , res)=>{
-    let phoneNumber = req.body.phoneNumber;
-
-    let code = Math.floor(100000 + Math.random() * 900000); // otp 
-    client.messages.create({
+async function sendOTP(PhoneNumber, Name, code) {
+    try {
+        const message = `Hello ${Name}, your 6 digit otp verification code is ${code}`;
+        await client.messages.create({
             src: '+919877319473',
-            dst: "+91"+`${req.body.phoneNumber}`,
-            text: `Hello, your 6 digit otp verification code for login is ${code}`
-        }
-    ).then(function(message_created) {
-        console.log(message_created)
-        
-    })
-    .catch(err=>console.log(err));
-
-    User.updateOtp(phoneNumber,code)
-    .then(()=>{
-        // console.log(code);
-        res.status(200).send({'otp_sent':code})})
-    .catch(err=>{res.send(err)})
-    
+            dst: "+91" + PhoneNumber,
+            text: message
+        });
+        console.log("OTP sent successfully");
+    } catch (error) {
+        console.error("Error sending OTP:", error);
+        throw error;
+    }
 }
 
-exports.postLoginVerify = (req , res)=>{
-//    console.log("boilbfcbdolrbrolbv");
-let phoneNumber = req.body.phoneNumber;
-let otp = req.body.otp;
-        User.getRecordByPhoneNumber(phoneNumber)
-        .then(([data,md])=>{
-            // console.log(data);
-
-         if (data[0].Designation.includes('VERIFIED')){  
-            
-            
-            if (data[0].OTP == otp){
-                const token = jwt.sign({PhoneNumber:phoneNumber},
-                'secret',{expiresIn:'9h'});
-                res.status(200).send({token:token});
-            }
-
-            else {
-                res.status(400).send('otp didnt match');
-            }
-
-            }
-                else {
-                    res.status(400).send('user not verified');
-                }
-
-        })
-        .catch(err => console.log(err))
+async function saveUser(Name, Email, PhoneNumber, Country, State, City, ZipCode, code, Designation) {
+    try {
+        const user = new User(null, Name, Email, PhoneNumber, Country, State, City, ZipCode, code, Designation);
+        await user.save();
+        console.log("User added successfully");
+    } catch (error) {
+        console.error("Error saving user:", error);
+        throw error;
     }
+}
+
+function generateToken(PhoneNumber) {
+    const token = jwt.sign({ PhoneNumber }, 'secret', { expiresIn: '9h' });
+    return token;
+}
+
+
+exports.postVerify = async (req, res) => {
+    try {
+        const { Token, OTP } = req.body;
+        const decodedToken = await verifyToken(Token);
+        const PhoneNumber = decodedToken.PhoneNumber;
+        const userData = await getUserRecordByPhoneNumber(PhoneNumber);
+        // get OTP and Designation from user data
+        const dbOTP = userData[userData.length - 1].OTP;
+        const Designation = userData[userData.length - 1].Designation;
+        const userId = userData[userData.length - 1].id;
+
+        if (dbOTP === OTP) {
+            await updateUserVerification(PhoneNumber, Designation);
+            res.status(200).send(`VERIFIED ${Designation}`);
+            // If user is a driver, add to driver table
+            if (Designation === 'DRIVER' || Designation === 'VERIFIED DRIVER') {
+                const driver = new Driver(userId);
+                await driver.save();
+                console.log("Driver added");
+            }
+        } else {
+            res.status(400).send("WRONG OTP");
+            console.log("Unable to verify");
+        }
+    } catch (error) {
+        console.error("Error in postVerify:", error);
+        res.status(500).send("Internal server error");
+    }
+};
+
+async function verifyToken(Token) {
+    try {
+        return jwt.verify(Token, 'secret');
+    } catch (error) {
+        error.statusCode = 500;
+        throw error;
+    }
+}
+
+async function getUserRecordByPhoneNumber(PhoneNumber) {
+    try {
+        const [data, meta] = await User.getRecordByPhoneNumber(PhoneNumber);
+        return data;
+    } catch (error) {
+        throw error;
+    }
+}
+
+async function updateUserVerification(PhoneNumber, Designation) {
+    try {
+        await User.update_verify(PhoneNumber, Designation);
+    } catch (error) {
+        throw error;
+    }
+}
+
+
+exports.postLogin = async (req, res) => {
+    try {
+        const phoneNumber = req.body.phoneNumber;
+        // Generate a random 6-digit OTP
+        const code = Math.floor(100000 + Math.random() * 900000);
+        // Send OTP to the user
+        await client.messages.create({
+            src: '+919877319473',
+            dst: "+91" + phoneNumber,
+            text: `Hello, your 6 digit otp verification code for login is ${code}`
+        });
+        // Update OTP in the database
+        await User.updateOtp(phoneNumber, code);
+        res.status(200).send({ otp_sent: code });
+    } catch (error) {
+        console.error("Error in postLogin:", error);
+        res.status(500).send("Internal server error");
+    }
+};
+exports.postLoginVerify = async (req, res) => {
+    try {
+        const phoneNumber = req.body.phoneNumber;
+        const otp = req.body.otp;
+        const [data, md] = await User.getRecordByPhoneNumber(phoneNumber);
+        if (!data.length) {
+            return res.status(400).send('User not found');
+        }
+        const user = data[0];
+        if (!user.Designation.includes('VERIFIED')) {
+            return res.status(400).send('User not verified');
+        }
+        if (user.OTP !== otp) {
+            return res.status(400).send('OTP does not match');
+        }
+        const token = jwt.sign({ PhoneNumber: phoneNumber }, 'secret', { expiresIn: '9h' });
+        res.status(200).send({ token });
+    } catch (error) {
+        console.error("Error in postLoginVerify:", error);
+        res.status(500).send("Internal server error");
+    }
+};

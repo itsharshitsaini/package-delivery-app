@@ -1,11 +1,6 @@
 const express = require('express');
-// let  SK = "sk_test_51MXNOPSCt2duW6ZAJkbJ42iyqrhZbj7gIvQyjN2pVLh7gvbAXXyigOungR0fHwSstjNKTY83Xpi8IJNxT5DbGtsk00x8m9VWh9"
-// const stripe = require('stripe')(SK);
-
 require('dotenv').config();
-// const bodyParser = require('body-parser');
-const port = process.env.PORT||3000;
-
+const port = process.env.PORT;
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
 const adminRoutes = require('./routes/admin');
@@ -23,13 +18,17 @@ app.use (productRoutes);
 app.use ('/driver',driverRoutes);
 
 
-app.use('/s/:id',(req,res)=>{
-    let tracking_id = req.params.id;
-    Product.setStatusByTrackingId(tracking_id)
-    .then(console.log('done'))
-    .catch(err=>{console.log(err);})
-
-})
+app.use('/s/:id', async (req, res) => {
+    try {
+        const tracking_id = req.params.id;
+        await Product.setStatusByTrackingId(tracking_id);
+        console.log('Status updated successfully');
+        res.sendStatus(200);
+    } catch (error) {
+        console.error('Error updating status:', error);
+        res.sendStatus(500);
+    }
+});
 
 // app.post('/hooks',async(req,res)=>{
 //     // console.log("Afnwi.................................................................");
@@ -52,17 +51,4 @@ app.use('/s/:id',(req,res)=>{
 //     // console.log(payload.type);
 
 // })
-
-
-
-
-
-// sequelize.sync().then(res =>{
-//     console.log(res);
-
-// })
-// .catch(err=>{
-//     console.log(err);
-// })
-
 app.listen(port,()=>{console.log(`listening at port ${port}`);});
